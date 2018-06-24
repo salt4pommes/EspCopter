@@ -1,41 +1,31 @@
 #include <ESP8266WiFi.h>
+#include <ESP8266mDNS.h>
 #include <Wire.h>
 #include <EEPROM.h>
+#include <WiFiUdp.h>
+#include <ArduinoOTA.h>
 
-extern "C" { 
-  #include <espnow.h> 
+extern "C" {
+  #include <espnow.h>
 }
 
-#include "RC.h"
+#define FIXED_IP false
+
+#ifdef FIXED_IP
+uint8_t ip_address[4] = {192, 168, 178, 99};
+uint8_t ip_gateway[4] = {192, 168, 178, 1};
+uint8_t ip_netmask[4] = {255, 255, 255, 0};
+#endif
+
+const char *ssid = "";
+const char *password = "";
+const char *chip_name = "";
 
 #define WIFI_CHANNEL 4
-//#define PWMOUT  // normal esc, uncomment for serial esc
+#define PWMOUT  // normal esc, uncomment for serial esc
 //#define ARMSWITCH
-
 volatile boolean recv;
 volatile int peernum = 0;
-
-void recv_cb(u8 *macaddr, u8 *data, u8 len)
-{
-  recv = true;
-  //Serial.print("recv_cb ");
-  //Serial.println(len); 
-  if (len == RCdataSize) 
-  {
-    for (int i=0;i<RCdataSize;i++) RCdata.data[i] = data[i];
-  }
-  if (!esp_now_is_peer_exist(macaddr))
-  {
-    Serial.println("adding peer ");
-    esp_now_add_peer(macaddr, ESP_NOW_ROLE_COMBO, WIFI_CHANNEL, NULL, 0);
-    peernum++;
-  }
-};
-
-void send_cb(uint8_t* mac, uint8_t sendStatus) 
-{
-  //Serial.print("send_cb ");
-};
 
 #define ACCRESO 4096
 #define CYCLETIME 4
@@ -48,7 +38,7 @@ enum ang { ROLL,PITCH,YAW };
 static int16_t gyroADC[3];
 static int16_t accADC[3];
 static int16_t gyroData[3];
-static float angle[2]    = {0,0};  
+static float angle[2]    = {0,0};
 extern int calibratingA;
 
 #define ROL 0
@@ -68,22 +58,52 @@ static int8_t oldflightmode;
 boolean armed = false;
 uint8_t armct = 0;
 
-void setup() 
+#include "lib/pid.cpp"
+#include "lib/rc.cpp"
+#include "lib/imu.cpp"
+#include "lib/mpu6050.cpp"
+#include "lib/telemetry.cpp"
+
+void recv_cb(u8 *macaddr, u8 *data, u8 len)
 {
-  Serial.begin(115200); Serial.println();
+  recv = true;
+  //Serial.print("recv_cb ");
+  //Serial.println(len);
+  if (len == RCdataSize)
+  {
+    for (int i=0;i<RCdataSize;i++) RCdata.data[i] = data[i];
+  }
+  if (!esp_now_is_peer_exist(macaddr))
+  {
+    Serial.println("adding peer ");
+    esp_now_add_peer(macaddr, ESP_NOW_ROLE_COMBO, WIFI_CHANNEL, NULL, 0);
+    peernum++;
+  }
+};
+
+void send_cb(uint8_t* mac, uint8_t sendStatus)
+{
+  //Serial.print("send_cb ");
+};
+
+void setup() {
+
+  Serial.begin(115200);
 
   MPU6050_init();
   MPU6050_readId(); // must be 0x68, 104dec
-  
+
   EEPROM.begin(64);
   if (EEPROM.read(63) != 0x55) Serial.println("Need to do ACC calib");
   ACC_Read();
-  
-  WiFi.mode(WIFI_STA); // Station mode for esp-now 
+
+//   WiFi.mode(WIFI_STA);
+//   WiFi.begin(ssid, password);
+
+  WiFi.mode(WIFI_STA); // Station mode for esp-now
   WiFi.disconnect();
 
-  Serial.printf("This mac: %s, ", WiFi.macAddress().c_str()); 
-  Serial.printf(", channel: %i\n", WIFI_CHANNEL); 
+//   while (WiFi.waitForConnectResult() != WL_CONNECTED) {}
 
   if (esp_now_init() != 0) Serial.println("*** ESP_Now init failed");
 
@@ -91,27 +111,42 @@ void setup()
 
   esp_now_register_recv_cb(recv_cb);
   esp_now_register_send_cb(send_cb);
-  
-  delay(1000); 
+
+//   ArduinoOTA.onEnd([]() {
+//     Serial.println("\nEnd");
+//   });
+
+  #ifdef FIXED_IP
+    IPAddress ip(ip_address);
+    IPAddress gateway(ip_gateway);
+    IPAddress subnet(ip_netmask);
+    WiFi.config(ip, gateway, subnet);
+  #endif
+
+//   ArduinoOTA.setHostname(chip_name);
+//   ArduinoOTA.begin();
+
+  delay(1000);
   initServo();
 }
 
 uint32_t rxt; // receive time, used for falisave
 
-void loop() 
-{
-  uint32_t now,diff; 
-  
+void loop() {
+//   ArduinoOTA.handle();
+
+  uint32_t now,diff;
+
   //now = millis(); // actual time
 
   if (recv)
   {
-    recv = false;    
+    recv = false;
     buf_to_rc();
 
     if      (rcValue[AU1] < 1300) flightmode = GYRO;
     else if (rcValue[AU1] > 1700) flightmode = RTH;
-    else                          flightmode = STABI;   
+    else                          flightmode = STABI;
     if (oldflightmode != flightmode)
     {
       zeroGyroI();
@@ -119,34 +154,34 @@ void loop()
     }
 
     #if defined (ARMSWITCH)
-      if (armed) 
-      {
-        if (rcValue[AU2] <= 1400) { armed = false; armct = 0; }
-        rcValue[THR]    -= THRCORR;
-        rcCommand[ROLL]  = rcValue[ROL] - MIDRUD;
-        rcCommand[PITCH] = rcValue[PIT] - MIDRUD;
-        rcCommand[YAW]   = rcValue[RUD] - MIDRUD;
-      }  
-      else if (rcValue[AU2] >= 1600)
-      {  
-        if (rcValue[THR] < MINTHROTTLE) armct++;
-        if (armct >= 25) armed = true;
-      } 
+    if (armed)
+    {
+      if (rcValue[AU2] <= 1400) { armed = false; armct = 0; }
+      rcValue[THR]    -= THRCORR;
+      rcCommand[ROLL]  = rcValue[ROL] - MIDRUD;
+      rcCommand[PITCH] = rcValue[PIT] - MIDRUD;
+      rcCommand[YAW]   = rcValue[RUD] - MIDRUD;
+    }
+    else if (rcValue[AU2] >= 1600)
+    {
+      if (rcValue[THR] < MINTHROTTLE) armct++;
+      if (armct >= 25) armed = true;
+    }
     #else
-      if (armed) 
-      {
-        rcValue[THR]    -= THRCORR;
-        rcCommand[ROLL]  = rcValue[ROL] - MIDRUD;
-        rcCommand[PITCH] = rcValue[PIT] - MIDRUD;
-        rcCommand[YAW]   = rcValue[RUD] - MIDRUD;
-      }  
-      else
-      {  
-        if (rcValue[THR] < MINTHROTTLE) armct++;
-        if (armct >= 25) armed = true;
-      }
-    #endif 
-    
+    if (armed)
+    {
+      rcValue[THR]    -= THRCORR;
+      rcCommand[ROLL]  = rcValue[ROL] - MIDRUD;
+      rcCommand[PITCH] = rcValue[PIT] - MIDRUD;
+      rcCommand[YAW]   = rcValue[RUD] - MIDRUD;
+    }
+    else
+    {
+      if (rcValue[THR] < MINTHROTTLE) armct++;
+      if (armct >= 25) armed = true;
+    }
+    #endif
+
     //Serial.println(rcValue[AU2]    );
     //Serial.print(rcValue[THR]    ); Serial.print("  ");
     //Serial.print(rcCommand[ROLL] ); Serial.print("  ");
@@ -157,7 +192,7 @@ void loop()
     //Serial.print(diff); Serial.println();
     rxt = millis();
 
-    if (peernum > 0) 
+    if (peernum > 0)
     {
       //t_angle();
       t_gyro();
@@ -171,7 +206,7 @@ void loop()
   //Serial.print(gyroADC[0]); Serial.print("  ");
   //Serial.print(gyroADC[1]); Serial.print("  ");
   //Serial.print(gyroADC[2]); Serial.println("  ");
-  
+
   ACC_getADC();
   //Serial.print(accADC[0]); Serial.print("  ");
   //Serial.print(accADC[1]); Serial.print("  ");
@@ -186,7 +221,7 @@ void loop()
   mix();
 
   writeServo();
-  
+
   // Failsave part
   if (now > rxt+90)
   {
@@ -201,22 +236,20 @@ void loop()
     char ch = Serial.read();
     // Perform ACC calibration
     if (ch == 'A')
-    { 
+    {
       Serial.println("Doing ACC calib");
       calibratingA = 64; // CALSTEPS
       while (calibratingA != 0)
       {
         delay(CYCLETIME);
-        ACC_getADC(); 
+        ACC_getADC();
       }
       ACC_Store();
       Serial.println("ACC calib Done");
     }
   }
-  
+
   delay(CYCLETIME-1);
   //diff = millis() - now;
   //Serial.print(diff); Serial.println();
 }
-
-

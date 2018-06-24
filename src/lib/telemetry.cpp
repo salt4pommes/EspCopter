@@ -1,3 +1,9 @@
+#include <ESP8266WiFi.h>
+#include <ESP8266mDNS.h>
+#include <Wire.h>
+#include <EEPROM.h>
+#include <WiFiUdp.h>
+#include <ArduinoOTA.h>
 
 uint8_t tbuf_pos;
 char t_line[32];
@@ -20,11 +26,11 @@ void t_angle()
 
 void t_gyro()
 {
-  tbuf_pos  = sprintf(t_line,"%d",           gyroADC[0]); 
+  tbuf_pos  = sprintf(t_line,"%d",           gyroADC[0]);
   t_add(' ');
-  tbuf_pos += sprintf(&t_line[tbuf_pos],"%d",gyroADC[1]); 
+  tbuf_pos += sprintf(&t_line[tbuf_pos],"%d",gyroADC[1]);
   t_add(' ');
-  tbuf_pos += sprintf(&t_line[tbuf_pos],"%d",gyroADC[2]); 
+  tbuf_pos += sprintf(&t_line[tbuf_pos],"%d",gyroADC[2]);
  t_add(13);
   t_add(10);
   esp_now_send(NULL, (u8*)t_line, tbuf_pos);

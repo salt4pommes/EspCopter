@@ -1,4 +1,33 @@
+// Spec of RC data
 
+#define CHANNELS 8
+#define IN_PIN 2
+
+typedef struct
+{
+  uint16_t Ch1     : 11;
+  uint16_t Ch2     : 11;
+  uint16_t Ch3     : 11;
+  uint16_t Ch4     : 11;
+  uint16_t Ch5     : 11;
+  uint16_t Ch6     : 11;
+  uint16_t Ch7     : 11;
+  uint16_t Ch8     : 11;
+  uint8_t spare    :  8;
+}Payload;
+
+#define RCdataSize 12
+
+typedef union
+{
+  Payload chans;
+  uint8_t data[RCdataSize];
+} RCdataTY;
+
+RCdataTY RCdata;
+
+int16_t rcValue[CHANNELS];  // in us, center = 1500
+uint8_t seqno;
 
 void buf_to_rc()
 {
@@ -29,8 +58,8 @@ void mix()
     //servo[2] = constrain(rcValue[THR],MINTHROTTLE,2000);
     //servo[3] = constrain(rcValue[THR],MINTHROTTLE,2000);
   }
-  else 
-  { 
+  else
+  {
     zeroGyroI();
     axisPID[0] = 0; axisPID[1] = 0; axisPID[2] = 0;
     servo[0] = 1000; servo[1] = 1000; servo[2] = 1000; servo[3] = 1000;
@@ -38,7 +67,7 @@ void mix()
   //Serial.print(servo[0]); Serial.print("  ");
   //Serial.print(servo[1]); Serial.print("  ");
   //Serial.print(servo[2]); Serial.print("  ");
-  //Serial.print(servo[3]); Serial.print("  ");  
+  //Serial.print(servo[3]); Serial.print("  ");
 }
 
 #if defined PWMOUT //----------------------------------------------
@@ -81,20 +110,20 @@ void inline PWM_ISR(void)
   }
 }
 
-void writeServo() 
+void writeServo()
 {
-  pwmServo[0] = servo[0]*80;  
-  pwmServo[1] = servo[1]*80;  
-  pwmServo[2] = servo[2]*80;  
-  pwmServo[3] = servo[3]*80;  
+  pwmServo[0] = servo[0]*80;
+  pwmServo[1] = servo[1]*80;
+  pwmServo[2] = servo[2]*80;
+  pwmServo[3] = servo[3]*80;
 }
 
-void initServo() 
+void initServo()
 {
-  pinMode(pwmpin1, OUTPUT); 
-  pinMode(pwmpin2, OUTPUT); 
-  pinMode(pwmpin3, OUTPUT); 
-  pinMode(pwmpin4, OUTPUT); 
+  pinMode(pwmpin1, OUTPUT);
+  pinMode(pwmpin2, OUTPUT);
+  pinMode(pwmpin3, OUTPUT);
+  pinMode(pwmpin4, OUTPUT);
   noInterrupts();
   timer0_isr_init();
   timer0_attachInterrupt(PWM_ISR);
