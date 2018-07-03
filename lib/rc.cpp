@@ -37,6 +37,23 @@ void buf_to_rc() {
     rcValue[5] = RCdata.chans.Ch6;
     rcValue[6] = RCdata.chans.Ch7;
     rcValue[7] = RCdata.chans.Ch8;
+
+    rcValue[0] = 1500;
+    rcValue[1] = 1500;
+    rcValue[2] = 1500;
+    rcValue[3] = 1500;
+    rcValue[4] = 1000;
+    rcValue[5] = 1000;
+    rcValue[6] = 1000;
+    rcValue[7] = 1000;
+
+    #define ROL 0
+    #define PIT 1
+    #define THR 2
+    #define RUD 3
+    #define AU1 4
+    #define AU2 5
+
     seqno = RCdata.chans.spare;
 }
 
@@ -79,38 +96,11 @@ uint8_t  pwmActChan = 0;
 uint32_t pwmServo[4] = {80000, 80000, 80000, 80000};
 uint32_t next;
 
-void inline PWM_ISR(void) {
-    next += pwmServo[pwmActChan];
-    timer0_write(next);
-    switch (pwmActChan) {
-        case 0:
-            digitalWrite(pwmpin4, LOW);
-            digitalWrite(pwmpin1, HIGH);
-            pwmActChan = 1;
-            break;
-        case 1:
-            digitalWrite(pwmpin1, LOW);
-            digitalWrite(pwmpin2, HIGH);
-            pwmActChan = 2;
-            break;
-        case 2:
-            digitalWrite(pwmpin2, LOW);
-            digitalWrite(pwmpin3, HIGH);
-            pwmActChan = 3;
-            break;
-        case 3:
-            digitalWrite(pwmpin3, LOW);
-            digitalWrite(pwmpin4, HIGH);
-            pwmActChan = 0;
-            break;
-    }
-}
-
 void writeServo() {
-    pwmServo[0] = servo[0] * 80;
-    pwmServo[1] = servo[1] * 80;
-    pwmServo[2] = servo[2] * 80;
-    pwmServo[3] = servo[3] * 80;
+    analogWrite(pwmpin1, map(servo[0], 1000, 2000, 0, 1023));
+    analogWrite(pwmpin2, map(servo[1], 1000, 2000, 0, 1023));
+    analogWrite(pwmpin3, map(servo[2], 1000, 2000, 0, 1023));
+    analogWrite(pwmpin4, map(servo[3], 1000, 2000, 0, 1023));
 }
 
 void initServo() {
@@ -118,12 +108,6 @@ void initServo() {
     pinMode(pwmpin2, OUTPUT);
     pinMode(pwmpin3, OUTPUT);
     pinMode(pwmpin4, OUTPUT);
-    noInterrupts();
-    timer0_isr_init();
-    timer0_attachInterrupt(PWM_ISR);
-    next = ESP.getCycleCount() + 100000;
-    timer0_write(next);
-    interrupts();
 }
 
 #else //----------------------------------------------

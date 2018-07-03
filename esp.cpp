@@ -9,8 +9,10 @@ extern "C" {
 #include <espnow.h>
 }
 
+#define FIXED_IP
+
 #ifdef FIXED_IP
-uint8_t ip_address[4] = {192, 168, 178, 99};
+uint8_t ip_address[4] = {192, 168, 178, 2};
 uint8_t ip_gateway[4] = {192, 168, 178, 1};
 uint8_t ip_netmask[4] = {255, 255, 255, 0};
 #endif
@@ -74,6 +76,7 @@ void recv_cb(u8 *macaddr, u8 *data, u8 len) {
         esp_now_add_peer(macaddr, ESP_NOW_ROLE_COMBO, WIFI_CHANNEL, NULL, 0);
         peernum++;
     }
+    peernum = 1;
 };
 
 void send_cb(uint8_t *mac, uint8_t sendStatus) {
@@ -132,6 +135,14 @@ void loop() {
     uint32_t now, diff;
 
     //now = millis(); // actual time
+    rcValue[THR] = 2000;
+    rcCommand[THR] = 2000;
+    rcCommand[ROLL] = 1500;
+    rcCommand[PITCH] = 1500;
+    rcCommand[YAW] = 1500;
+
+    recv = true;
+    armed = true;
 
     if (recv) {
         recv = false;
@@ -140,6 +151,7 @@ void loop() {
         if (rcValue[AU1] < 1300) flightmode = GYRO;
         else if (rcValue[AU1] > 1700) flightmode = RTH;
         else                          flightmode = STABI;
+        flightmode = GYRO;
         if (oldflightmode != flightmode) {
             zeroGyroI();
             oldflightmode = flightmode;
@@ -171,11 +183,11 @@ void loop() {
         }
 #endif
 
-        //Serial.println(rcValue[AU2]    );
-        //Serial.print(rcValue[THR]    ); Serial.print("  ");
-        //Serial.print(rcCommand[ROLL] ); Serial.print("  ");
-        //Serial.print(rcCommand[PITCH]); Serial.print("  ");
-        //Serial.print(rcCommand[YAW]  ); Serial.println();
+//         Serial.println(rcValue[AU2]    );
+//         Serial.print(rcValue[THR]    ); Serial.print("  ");
+//         Serial.print(rcCommand[ROLL] ); Serial.print("  ");
+//         Serial.print(rcCommand[PITCH]); Serial.print("  ");
+//         Serial.print(rcCommand[YAW]  ); Serial.println();
 
         //diff = now - rxt;
         //Serial.print(diff); Serial.println();
